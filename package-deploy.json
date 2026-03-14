@@ -4,9 +4,9 @@
   "description": "AI Agent Platform with Telegram",
   "main": "apps/api/server-http.js",
   "scripts": {
-    "start": "node apps/api/server-http.js",
-    "install-deps": "npm install"
+    "start": "node apps/api/server-http.js"
   },
+  "dependencies": {},
   "engines": {
     "node": ">=18.0.0"
   }
