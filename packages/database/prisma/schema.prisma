@@ -1,0 +1,390 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  avatar        String?
+  passwordHash  String?   // For credential auth
+  oauthProvider String?   // google, github, etc.
+  oauthId       String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  agents        Agent[]
+  customSkills  Skill[]   @relation("SkillCreator")
+  customTools   Tool[]    @relation("ToolCreator")
+  conversations Conversation[]
+  apiKeys       ApiKey[]
+  
+  @@index([email])
+  @@map("users")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  keyHash     String    @unique
+  permissions Json      // ["agents:read", "chat:write", etc.]
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("api_keys")
+}
+
+// ============================================
+// AGENT DEFINITION
+// ============================================
+
+model Agent {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  avatar          String?
+  
+  // LLM Configuration
+  model           String    @default("openai/gpt-4o-mini")
+  temperature     Float     @default(0.7)
+  maxTokens       Int       @default(4096)
+  topP            Float     @default(1.0)
+  frequencyPenalty Float   @default(0.0)
+  presencePenalty Float    @default(0.0)
+  
+  // Base behavior
+  systemPrompt    String?   @db.Text
+  
+  // Status
+  isActive        Boolean   @default(true)
+  isPublic        Boolean   @default(false) // Allow others to clone
+  
+  // Meta
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  ownerId         String
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  skills          AgentSkill[]
+  tools           AgentTool[]
+  conversations   Conversation[]
+  telegramConfig  TelegramConfig?
+  
+  @@index([ownerId])
+  @@map("agents")
+}
+
+// ============================================
+// SKILLS SYSTEM
+// ============================================
+
+model Skill {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  description     String?
+  category        SkillCategory
+  icon            String?
+  color           String?       // Hex color for UI
+  
+  // Prompt configuration
+  prompt          String        @db.Text
+  variables       Json?         // JSON Schema for variables
+  
+  // Execution config
+  priority        Int           @default(0) // Default priority in assembly
+  
+  // Visibility
+  isBuiltin       Boolean       @default(false)
+  isPublic        Boolean       @default(false)
+  
+  // Meta
+  version         Int           @default(1)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  creatorId       String?
+  creator         User?         @relation("SkillCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  agents          AgentSkill[]
+  
+  @@index([category])
+  @@index([isPublic])
+  @@map("skills")
+}
+
+enum SkillCategory {
+  PERSONALITY      // Core personality traits
+  DOMAIN_EXPERTISE // Professional knowledge
+  TASK_SPECIFIC    // Task-oriented skills
+  COMMUNICATION    // Communication style
+  CUSTOM           // User-created
+}
+
+model AgentSkill {
+  id              String    @id @default(cuid())
+  agentId         String
+  skillId         String
+  isEnabled       Boolean   @default(true)
+  
+  // Overrides
+  customPrompt    String?   @db.Text // Override base prompt
+  priority        Int       // Specific priority for this agent
+  
+  // Variable values (if skill has variables)
+  variables       Json?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill           Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  
+  @@unique([agentId, skillId])
+  @@index([agentId])
+  @@map("agent_skills")
+}
+
+// ============================================
+// TOOLS SYSTEM
+// ============================================
+
+model Tool {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  description     String?
+  category        ToolCategory
+  icon            String?
+  
+  // Configuration
+  configSchema    Json          // JSON Schema for tool config
+  inputSchema     Json          // JSON Schema for tool inputs (function calling)
+  handlerModule   String        // Path to implementation
+  
+  // Execution settings
+  timeoutMs       Int           @default(30000)
+  requiresAuth    Boolean       @default(false)
+  
+  // Visibility
+  isBuiltin       Boolean       @default(false)
+  isPublic        Boolean       @default(false)
+  
+  // Meta
+  version         Int           @default(1)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  creatorId       String?
+  creator         User?         @relation("ToolCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  agents          AgentTool[]
+  
+  @@index([category])
+  @@index([isPublic])
+  @@map("tools")
+}
+
+enum ToolCategory {
+  COMMUNICATION    // Telegram, Email, Slack
+  DATA_ACCESS      // Database, API, Search
+  FILE_SYSTEM      // File operations
+  CODE_EXECUTION   // Sandboxed code
+  EXTERNAL_API     // Third-party APIs
+  CUSTOM           // User-created
+}
+
+model AgentTool {
+  id              String    @id @default(cuid())
+  agentId         String
+  toolId          String
+  isEnabled       Boolean   @default(true)
+  
+  // Tool-specific configuration
+  config          Json?
+  
+  // Permissions
+  allowedOperations String[] // Subset of tool operations
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tool            Tool      @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  
+  @@unique([agentId, toolId])
+  @@index([agentId])
+  @@map("agent_tools")
+}
+
+// ============================================
+// CONVERSATION SYSTEM
+// ============================================
+
+model Conversation {
+  id              String        @id @default(cuid())
+  title           String?
+  
+  // Participants
+  agentId         String
+  userId          String
+  
+  // Channel
+  channel         Channel       @default(WEB)
+  channelMetadata Json?         // { telegramChatId, apiKeyId, etc. }
+  
+  // Status
+  status          ConversationStatus @default(ACTIVE)
+  
+  // Stats
+  messageCount    Int           @default(0)
+  tokenCount      Int           @default(0)
+  
+  // Timestamps
+  lastMessageAt   DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  agent           Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages        Message[]
+  
+  @@index([agentId, userId])
+  @@index([channel])
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+enum Channel {
+  WEB
+  TELEGRAM
+  API
+  VOICE
+  WIDGET
+}
+
+enum ConversationStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+  DELETED
+}
+
+model Message {
+  id              String        @id @default(cuid())
+  conversationId  String
+  
+  // Message content
+  role            MessageRole
+  content         String        @db.Text
+  
+  // Tool interactions
+  toolCalls       Json?         // Array of tool calls requested
+  toolResults     Json?         // Array of tool execution results
+  
+  // Voice support
+  audioUrl        String?       // URL to voice recording
+  audioDuration   Int?          // Duration in seconds
+  transcript      String?       // Transcribed text
+  
+  // Metadata
+  metadata        Json?         // { model, tokens, latency, etc. }
+  
+  // Performance
+  tokensUsed      Int?
+  latencyMs       Int?
+  
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  
+  // Relations
+  conversation    Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+enum MessageRole {
+  SYSTEM
+  USER
+  ASSISTANT
+  TOOL
+}
+
+// ============================================
+// TELEGRAM INTEGRATION
+// ============================================
+
+model TelegramConfig {
+  id                String    @id @default(cuid())
+  agentId           String    @unique
+  
+  // Bot configuration
+  botToken          String    // Encrypted
+  botUsername       String?
+  webhookUrl        String?
+  webhookSecret     String?   // For verification
+  
+  // Behavior
+  welcomeMessage    String?   @db.Text
+  unknownCommandMsg String?
+  
+  // Access control
+  isActive          Boolean   @default(true)
+  allowAllUsers     Boolean   @default(false)
+  allowedUserIds    String[]  // If not allowAll
+  
+  // Settings
+  showTypingIndicator Boolean @default(true)
+  voiceEnabled      Boolean   @default(true)
+  
+  // Stats
+  totalMessages     Int       @default(0)
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  agent             Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  
+  @@map("telegram_configs")
+}
+
+model TelegramUserMapping {
+  id                  String    @id @default(cuid())
+  telegramUserId      String    @unique
+  telegramUsername    String?
+  telegramFirstName   String?
+  telegramLastName    String?
+  
+  // Optional link to platform account
+  platformUserId      String?
+  
+  // Stats
+  totalInteractions   Int       @default(0)
+  
+  // Timestamps
+  createdAt           DateTime  @default(now())
+  lastInteractionAt   DateTime  @updatedAt
+  
+  @@index([telegramUserId])
+  @@map("telegram_user_mappings")
+}

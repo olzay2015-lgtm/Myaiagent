@@ -1,0 +1,25 @@
+FROM node:20-alpine AS base
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+FROM base AS development
+
+ENV NODE_ENV=development
+
+WORKDIR /app
+
+COPY turbo.json ./
+COPY package*.json ./
+COPY packages ./packages
+COPY apps/websocket ./apps/websocket
+
+RUN npm install
+
+WORKDIR /app/apps/websocket
+
+EXPOSE 3001
+
+CMD ["npm", "run", "dev"]

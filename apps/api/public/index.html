@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>AI Agent Platform - Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 900px;
+            height: 85vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .agent-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .agent-selector label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .agent-selector select {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .agent-selector select option {
+            background: #764ba2;
+            color: white;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            font-size: 15px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+            text-align: right;
+        }
+
+        .message.assistant .message-time {
+            text-align: left;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            width: fit-content;
+        }
+
+        .typing-indicator.active {
+            display: flex;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #999;
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+            }
+            30% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 10px;
+            background: #f0f0f0;
+            border-radius: 25px;
+            padding: 5px;
+        }
+
+        .chat-input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 12px 20px;
+            font-size: 15px;
+            outline: none;
+            resize: none;
+            max-height: 120px;
+            font-family: inherit;
+        }
+
+        .chat-input::placeholder {
+            color: #999;
+        }
+
+        .send-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .send-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .send-button svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .welcome-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        .welcome-message h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .welcome-message p {
+            margin-bottom: 20px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #4caf50;
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        .info-panel {
+            background: #e3f2fd;
+            padding: 15px 20px;
+            border-bottom: 1px solid #bbdefb;
+            font-size: 13px;
+            color: #1565c0;
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .header-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .schedule-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .schedule-modal.active {
+            display: flex;
+        }
+
+        .schedule-modal-content {
+            background: white;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .schedule-modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .schedule-modal-header h2 {
+            font-size: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .schedule-modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .schedule-list {
+            margin-top: 20px;
+        }
+
+        .schedule-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .schedule-item-info {
+            flex: 1;
+        }
+
+        .schedule-item-message {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .schedule-item-time {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .schedule-item-delete {
+            background: #ff5252;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .schedule-item-delete:hover {
+            background: #f44336;
+        }
+
+        .no-tasks {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+
+        .quick-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .quick-btn {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            color: #1565c0;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:hover {
+            background: #bbdefb;
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                width: 100%;
+                height: 100vh;
+                border-radius: 0;
+            }
+
+            .message-content {
+                max-width: 80%;
+            }
+
+            .chat-header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>🤖 AI Agent Platform</h1>
+            <div class="header-buttons">
+                <div class="agent-selector">
+                    <label>Агент:</label>
+                    <select id="agentSelect">
+                        <option value="">Загрузка...</option>
+                    </select>
+                </div>
+                <button class="header-btn" id="scheduleBtn">📅 Расписание</button>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            💡 Выберите агента сверху и начните диалог. Все сообщения сохраняются в истории.
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <h2>Добро пожаловать!</h2>
+                <p>Выберите агента из списка выше и начните общение.</p>
+                <span class="status-badge"> Онлайн</span>
+            </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="message-avatar">🤖</div>
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>
+
+        <div class="chat-input-container">
+            <div class="chat-input-wrapper">
+                <textarea 
+                    class="chat-input" 
+                    id="messageInput" 
+                    placeholder="Введите сообщение..."
+                    rows="1"
+                ></textarea>
+                <button class="send-button" id="sendButton">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:4001';
+        let currentAgent = null;
+        let conversationHistory = [];
+        let scheduledTasks = [];
+
+        // Загрузка списка агентов
+        async function loadAgents() {
+            try {
+                const response = await fetch(`${API_URL}/agents`);
+                const data = await response.json();
+                
+                if (data.success && data.data.agents.length > 0) {
+                    const select = document.getElementById('agentSelect');
+                    select.innerHTML = '<option value="">Выберите агента...</option>';
+                    
+                    data.data.agents.forEach(agent => {
+                        const option = document.createElement('option');
+                        option.value = agent.id;
+                        option.textContent = agent.name;
+                        select.appendChild(option);
+                    });
+
+                    // Выбрать первого агента по умолчанию
+                    if (data.data.agents.length > 0) {
+                        select.value = data.data.agents[0].id;
+                        selectAgent(data.data.agents[0].id);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading agents:', error);
+                showError('Не удалось загрузить список агентов');
+            }
+        }
+
+        // Выбор агента
+        function selectAgent(agentId) {
+            currentAgent = agentId;
+            conversationHistory = [];
+            
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = `
+                <div class="welcome-message">
+                    <h2>Новый диалог</h2>
+                    <p>Начните общение с агентом. Все сообщения будут сохранены.</p>
+                </div>
+            `;
+        }
+
+        // Отправка сообщения
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const button = document.getElementById('sendButton');
+            const message = input.value.trim();
+
+            if (!message) return;
+            if (!currentAgent) {
+                showError('Пожалуйста, выберите агента');
+                return;
+            }
+
+            // Добавить сообщение пользователя
+            addMessage('user', message);
+            input.value = '';
+            button.disabled = true;
+
+            // Показать индикатор набора
+            showTypingIndicator();
+
+            try {
+                const response = await fetch(`${API_URL}/chat/${currentAgent}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        history: conversationHistory
+                    })
+                });
+
+                const data = await response.json();
+                hideTypingIndicator();
+
+                if (data.success) {
+                    // Добавить ответ агента
+                    addMessage('assistant', data.data.message.content);
+                    
+                    // Обновить историю
+                    conversationHistory.push(
+                        { role: 'user', content: message },
+                        { role: 'assistant', content: data.data.message.content }
+                    );
+                } else {
+                    showError(data.error?.message || 'Ошибка при получении ответа');
+                }
+            } catch (error) {
+                hideTypingIndicator();
+                console.error('Error sending message:', error);
+                showError('Ошибка соединения с сервером');
+            } finally {
+                button.disabled = false;
+                input.focus();
+            }
+        }
+
+        // Добавление сообщения в чат
+        function addMessage(role, content) {
+            const messagesContainer = document.getElementById('chatMessages');
+            
+            // Удалить приветствие если есть
+            const welcome = messagesContainer.querySelector('.welcome-message');
+            if (welcome) welcome.remove();
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            const avatar = role === 'user' ? '👤' : '🤖';
+            const time = new Date().toLocaleTimeString('ru-RU', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div>
+                    <div class="message-content">${escapeHtml(content)}</div>
+                    <div class="message-time">${time}</div>
+                </div>
+            `;
+
+            messagesContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // Показать индикатор набора
+        function showTypingIndicator() {
+            document.getElementById('typingIndicator').classList.add('active');
+            scrollToBottom();
+        }
+
+        // Скрыть индикатор набора
+        function hideTypingIndicator() {
+            document.getElementById('typingIndicator').classList.remove('active');
+        }
+
+        // Прокрутка вниз
+        function scrollToBottom() {
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Показать ошибку
+        function showError(message) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            messagesContainer.appendChild(errorDiv);
+            scrollToBottom();
+            
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        // Экранирование HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Обработчики событий
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        document.getElementById('messageInput').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        document.getElementById('agentSelect').addEventListener('change', function() {
+            if (this.value) {
+                selectAgent(this.value);
+            }
+        });
+
+        // Обработчик кнопки отправки
+        document.getElementById('sendButton').addEventListener('click', sendMessage);
+
+        // Загрузка агентов при старте
+        loadAgents();
+
+        // Проверка соединения
+        async function checkConnection() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                if (data.status === 'ok') {
+                    console.log('✅ Connected to API');
+                }
+            } catch (error) {
+                console.error('❌ Cannot connect to API:', error);
+                showError('⚠️ Сервер API недоступен. Убедитесь, что сервер запущен на порту 4000');
+            }
+        }
+
+        checkConnection();
+
+        // Schedule Modal - wait for DOM to be ready
+        document.addEventListener('DOMContentLoaded', function() {
+            const scheduleModal = document.getElementById('scheduleModal');
+            const scheduleBtn = document.getElementById('scheduleBtn');
+            const closeScheduleModal = document.getElementById('closeScheduleModal');
+
+            if (scheduleBtn) {
+                scheduleBtn.addEventListener('click', () => {
+                    scheduleModal.classList.add('active');
+                    loadScheduledTasks();
+                });
+            }
+
+            if (closeScheduleModal) {
+                closeScheduleModal.addEventListener('click', () => {
+                    scheduleModal.classList.remove('active');
+                });
+            }
+
+            if (scheduleModal) {
+                scheduleModal.addEventListener('click', (e) => {
+                    if (e.target === scheduleModal) {
+                        scheduleModal.classList.remove('active');
+                    }
+                });
+            }
+        });
+
+        function setQuickSchedule(amount, unit) {
+            const now = new Date();
+            const input = document.getElementById('scheduleDateTime');
+            
+            if (unit === 'min') {
+                now.setMinutes(now.getMinutes() + amount);
+            } else if (unit === 'hour') {
+                now.setHours(now.getHours() + amount);
+            } else if (unit === 'day') {
+                now.setDate(now.getDate() + amount);
+            }
+            
+            input.value = now.toISOString().slice(0, 16);
+        }
+
+        async function loadScheduledTasks() {
+            try {
+                const response = await fetch(`${API_URL}/schedule`);
+                const data = await response.json();
+                
+                scheduledTasks = data.success ? data.data : [];
+                renderScheduleList();
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+            }
+        }
+
+        function renderScheduleList() {
+            const list = document.getElementById('scheduleList');
+            
+            if (scheduledTasks.length === 0) {
+                list.innerHTML = '<div class="no-tasks">Нет запланированных задач</div>';
+                return;
+            }
+            
+            list.innerHTML = scheduledTasks.map(task => {
+                const date = new Date(task.scheduledTime);
+                const dateStr = date.toLocaleString('ru-RU', {
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                return `
+                    <div class="schedule-item">
+                        <div class="schedule-item-info">
+                            <div class="schedule-item-message">${escapeHtml(task.message)}</div>
+                            <div class="schedule-item-time">📅 ${dateStr}</div>
+                        </div>
+                        <button class="schedule-item-delete" onclick="deleteTask('${task.id}')">Удалить</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function createScheduledTask() {
+            const message = document.getElementById('scheduleMessage').value.trim();
+            const dateTime = document.getElementById('scheduleDateTime').value;
+            const chatId = document.getElementById('scheduleChatId').value.trim();
+            
+            if (!message) {
+                alert('Введите сообщение');
+                return;
+            }
+            
+            if (!dateTime) {
+                alert('Выберите дату и время');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/schedule`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        scheduledTime: new Date(dateTime).toISOString(),
+                        chatId: chatId || null
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('scheduleMessage').value = '';
+                    document.getElementById('scheduleDateTime').value = '';
+                    if (chatId) {
+                        await fetch(`${API_URL}/telegram/set-chatid`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chatId: chatId })
+                        });
+                    }
+                    loadScheduledTasks();
+                } else {
+                    alert('Ошибка: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error creating task:', error);
+                alert('Ошибка соединения');
+            }
+        }
+
+        async function deleteTask(taskId) {
+            try {
+                const response = await fetch(`${API_URL}/schedule/${taskId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadScheduledTasks();
+                }
+            } catch (error) {
+                console.error('Error deleting task:', error);
+            }
+        }
+    </script>
+
+    <!-- Schedule Modal -->
+    <div class="schedule-modal" id="scheduleModal">
+        <div class="schedule-modal-content">
+            <div class="schedule-modal-header">
+                <h2>📅 Расписание задач</h2>
+                <button class="close-btn" id="closeScheduleModal">&times;</button>
+            </div>
+            <div class="schedule-modal-body">
+                <div class="form-group">
+                    <label>Сообщение</label>
+                    <textarea id="scheduleMessage" rows="2" placeholder="Напоминание..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Telegram Chat ID</label>
+                    <input type="text" id="scheduleChatId" placeholder="Ваш Telegram Chat ID">
+                </div>
+
+                <div class="form-group">
+                    <label>Дата и время</label>
+                    <input type="datetime-local" id="scheduleDateTime">
+                </div>
+
+                <div class="quick-buttons">
+                    <button class="quick-btn" onclick="setQuickSchedule(5, 'min')">Через 5 мин</button>
+                    <button class="quick-btn" onclick="setQuickSchedule(1, 'hour')">Через 1 час</button>
+                    <button class="quick-btn" onclick="setQuickSchedule(24, 'hour')">Завтра</button>
+                    <button class="quick-btn" onclick="setQuickSchedule(7, 'day')">Через неделю</button>
+                </div>
+
+                <button class="send-button" style="width: 100%; border-radius: 10px; margin-bottom: 20px;" onclick="createScheduledTask()">
+                    Добавить задачу
+                </button>
+
+                <h3 style="margin-bottom: 10px; color: #333;">Запланированные задачи:</h3>
+                <div class="schedule-list" id="scheduleList">
+                    <div class="no-tasks">Загрузка...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

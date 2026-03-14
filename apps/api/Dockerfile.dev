@@ -1,0 +1,36 @@
+FROM node:20-alpine AS base
+
+WORKDIR /app
+
+# Install dependencies based on the preferred package manager
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Development image
+FROM base AS development
+
+ENV NODE_ENV=development
+
+WORKDIR /app
+
+# Copy workspace configuration
+COPY turbo.json ./
+COPY package*.json ./
+
+# Copy all packages
+COPY packages ./packages
+
+# Copy API app
+COPY apps/api ./apps/api
+
+# Install all dependencies
+RUN npm install
+
+# Generate Prisma client
+RUN cd packages/database && npx prisma generate
+
+WORKDIR /app/apps/api
+
+EXPOSE 4000
+
+CMD ["npm", "run", "dev"]
