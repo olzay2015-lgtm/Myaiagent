@@ -854,7 +854,7 @@
         async function createScheduledTask() {
             const message = document.getElementById('scheduleMessage').value.trim();
             const dateTime = document.getElementById('scheduleDateTime').value;
-            const chatId = document.getElementById('scheduleChatId').value.trim();
+            const chatId = '5238995969';
             
             if (!message) {
                 alert('Введите сообщение');
@@ -931,11 +931,6 @@
                     <textarea id="scheduleMessage" rows="2" placeholder="Напоминание..."></textarea>
                 </div>
                 
-                <div class="form-group">
-                    <label>Telegram Chat ID</label>
-                    <input type="text" id="scheduleChatId" placeholder="Ваш Telegram Chat ID">
-                </div>
-
                 <div class="form-group">
                     <label>Дата и время</label>
                     <input type="datetime-local" id="scheduleDateTime">
