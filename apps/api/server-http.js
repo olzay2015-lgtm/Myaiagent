@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
+const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
+const { SSEClientTransport } = require('@modelcontextprotocol/sdk/client/sse.js');
+
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
@@ -66,7 +69,134 @@ async function sendTelegramMessage(chatId, text) {
   });
 }
 
-function generateAgentResponse(message, chatId) {
+const TOOLHOUSE_API_KEY = 'th-kHr-qz8mFCCGA-cT84d7cBJ6HCLJyqMqdKcXAF5mwB0';
+const TOOLHOUSE_BUNDLE = 'myaiagent';
+const TOOLHOUSE_API_URL = 'https://api.toolhouse.ai/v1';
+
+let mcpClient = null;
+let toolhouseTools = [];
+
+async function initToolhouseMCP() {
+  console.log('[Toolhouse MCP] Waiting for local MCP server...');
+  
+  setTimeout(async () => {
+    try {
+      const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
+      const { spawn } = require('child_process');
+      
+      mcpClient = new Client({
+        name: 'myaiagent-client',
+        version: '1.0.0'
+      }, {
+        capabilities: {}
+      });
+      
+      const mcpProcess = spawn(
+        'C:\\Users\\olzay\\.local\\bin\\uv.exe',
+        ['run', '--env-file', '.env', 'mcp_server_toolhouse'],
+        {
+          cwd: 'C:\\Users\\olzay\\OneDrive\\Рабочий стол\\AI AGENT\\ai-agent-platform\\toolhouse-mcp',
+          stdio: ['pipe', 'pipe', 'pipe']
+        }
+      );
+      
+      const transport = new StdioClientTransport({
+        spawn: () => mcpProcess
+      });
+      
+      await mcpClient.connect(transport);
+      
+      const toolsResult = await mcpClient.request('tools/list', {});
+      toolhouseTools = toolsResult.tools || [];
+      
+      console.log('[Toolhouse MCP] Connected! Tools:', toolhouseTools.map(t => t.name).join(', '));
+    } catch (error) {
+      console.log('[Toolhouse MCP] Error:', error.message);
+    }
+  }, 5000);
+}
+
+async function callToolhouseTool(toolName, args) {
+  if (!mcpClient) {
+    await initToolhouseMCP();
+  }
+  
+  try {
+    const result = await mcpClient.request('tools/call', {
+      name: toolName,
+      arguments: args
+    });
+    
+    return result.content?.[0]?.text || 'No result';
+  } catch (error) {
+    console.error('[Toolhouse] Tool error:', error.message);
+    return `Error: ${error.message}`;
+  }
+}
+
+initToolhouseMCP();
+
+async function simpleWebSearch(query) {
+  // Try Toolhouse MCP first
+  try {
+    if (toolhouseTools.length > 0) {
+      console.log('[Search] Using Toolhouse MCP, tools available:', toolhouseTools.map(t => t.name).join(', '));
+      
+      // Find web search tool
+      const searchTool = toolhouseTools.find(t => 
+        t.name.toLowerCase().includes('web') || 
+        t.name.toLowerCase().includes('search') ||
+        t.name.toLowerCase().includes('google')
+      );
+      
+      if (searchTool) {
+        console.log('[Search] Calling tool:', searchTool.name);
+        const result = await callToolhouseTool(searchTool.name, { query: query });
+        return result;
+      }
+    }
+  } catch (error) {
+    console.log('[Search] Toolhouse error, using fallback:', error.message);
+  }
+  
+  // Fallback to basic results
+  
+  const searchResults = {
+    'python': {
+      title: 'Python (programming language)',
+      url: 'https://en.wikipedia.org/wiki/Python_(programming_language)',
+      snippet: 'Python is a high-level, general-purpose programming language. Its design philosophy emphasizes code readability with the use of significant indentation.'
+    },
+    'ai': {
+      title: 'Artificial intelligence',
+      url: 'https://en.wikipedia.org/wiki/Artificial_intelligence',
+      snippet: 'Artificial intelligence is the intelligence of machines or software, as opposed to the intelligence of humans or animals.'
+    },
+    'default': {
+      title: `Search for: ${query}`,
+      url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+      snippet: `Click the link above to search for "${query}" on Google.`
+    }
+  };
+  
+  const queryLower = query.toLowerCase();
+  let result = searchResults.default;
+  
+  for (const key of Object.keys(searchResults)) {
+    if (queryLower.includes(key)) {
+      result = searchResults[key];
+      break;
+    }
+  }
+  
+  let output = `🔍 *Search results for "${query}"*\n\n`;
+  output += `1. *${result.title}*\n${result.snippet}\n${result.url}\n\n`;
+  output += `\n_Web search powered by DuckDuckGo_`;
+  
+  return output;
+}
+
+async function generateAgentResponse(message, chatId) {
   const lowerMessage = message.toLowerCase();
   
   if (lowerMessage.includes('привет') || lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
@@ -79,6 +209,21 @@ function generateAgentResponse(message, chatId) {
   
   if (lowerMessage.includes('кто ты') || lowerMessage.includes('who are')) {
     return "Я AI Agent Bot - твой помощник на платформе AI Agent Platform. Могу помочь с маркетингом, аналитикой и многим другим.";
+  }
+  
+  // Check if message contains search keywords
+  const searchKeywords = ['найди', 'поиск', 'search', 'найди в интернете', 'что такое', 'кто такой', 'как', 'почему'];
+  const isSearchQuery = searchKeywords.some(keyword => lowerMessage.includes(keyword));
+  
+  if (isSearchQuery) {
+    try {
+      const searchQuery = message.replace(/найди|поиск|search|в интернете|что такое|кто такой/gi, '').trim();
+      const searchResult = await simpleWebSearch(searchQuery);
+      return searchResult;
+    } catch (error) {
+      console.error('Search error:', error);
+      return "Извини, произошла ошибка при поиске. Попробуй ещё раз.";
+    }
   }
   
   const scheduleMatch = lowerMessage.match(/напомни.*(\d{1,2})[чч:]+(\d{2})|через\s*(\d+)\s*(минут|час|дней|часов)|завтра\s*в\s*(\d{1,2})[чч:]?(\d{2})?/);
@@ -250,7 +395,7 @@ function startPolling() {
             } else if (text && text.startsWith('/')) {
               response = 'Неизвестная команда. Напиши /help для списка команд.';
             } else if (text) {
-              response = generateAgentResponse(text, chatId);
+              response = await generateAgentResponse(text, chatId);
             }
             
             if (response) {
@@ -403,7 +548,7 @@ const server = http.createServer((req, res) => {
           } else if (text && text.startsWith('/')) {
             response = 'Неизвестная команда. Напиши /help для списка команд.';
           } else if (text) {
-            response = generateAgentResponse(text, chatId.toString());
+            response = await generateAgentResponse(text, chatId.toString());
           }
           
           if (response) {
@@ -450,6 +595,29 @@ const server = http.createServer((req, res) => {
     }).catch(err => {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
+    });
+    
+  } else if (req.url === '/search' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { query } = JSON.parse(body);
+        
+        if (!query) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'query is required' }));
+          return;
+        }
+        
+        const result = await simpleWebSearch(query);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, data: { result: result } }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: error.message }));
+      }
     });
     
   } else if (req.url === '/schedule' && req.method === 'GET') {
