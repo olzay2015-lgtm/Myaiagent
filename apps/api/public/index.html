@@ -831,11 +831,12 @@
                 const response = await fetch(`${API_URL}/agents`);
                 const data = await response.json();
                 
-                if (data.success && data.data.agents.length > 0) {
+                const agents = data.agents || data.data?.agents || [];
+                if (agents.length > 0) {
                     const list = document.getElementById('agentsList');
                     list.innerHTML = '';
                     
-                    data.data.agents.forEach(agent => {
+                    agents.forEach(agent => {
                         const div = document.createElement('div');
                         div.className = 'agent-item';
                         div.dataset.id = agent.id;
@@ -843,7 +844,7 @@
                             <div class="agent-avatar">🤖</div>
                             <div class="agent-info">
                                 <div class="agent-name">${agent.name}</div>
-                                <div class="agent-desc">${agent.description}</div>
+                                <div class="agent-desc">${agent.role || agent.description || ''}</div>
                             </div>
                         `;
                         div.addEventListener('click', () => selectAgent(agent.id, agent.name));
@@ -851,8 +852,8 @@
                     });
 
                     // Auto-select first agent
-                    if (data.data.agents.length > 0) {
-                        selectAgent(data.data.agents[0].id, data.data.agents[0].name);
+if (agents.length > 0) {
+                        selectAgent(agents[0].id, agents[0].name);
                         list.children[0]?.classList.add('active');
                     }
                 }
