@@ -8,6 +8,11 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@ai-agent-platform/module-loader": "*",
+    "@ai-agent-platform/toolhouse": "*",
+    "@ai-agent-platform/memory": "*",
+    "@ai-agent-platform/rag": "*",
+    "@ai-agent-platform/scheduler": "*",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

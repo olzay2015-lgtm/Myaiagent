@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyAIAgent — Offline</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+    h1 { color: #e94560; margin-bottom: 0.5rem; }
+    p { color: #aaa; margin: 0.5rem 0; }
+    code {
+      background: #16213e;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      color: #0f3460;
+      font-size: 0.9rem;
+    }
+    .retry-btn {
+      margin-top: 1.5rem;
+      padding: 0.7rem 2rem;
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    .retry-btn:hover { background: #c62e48; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚡ Сервер недоступен</h1>
+    <p>Веб-интерфейс не запущен.</p>
+    <p>Запустите сервер командой:</p>
+    <p><code>npm run dev</code></p>
+    <button class="retry-btn" onclick="location.reload()">Повторить</button>
+  </div>
+</body>
+</html>

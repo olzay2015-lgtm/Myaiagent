@@ -388,3 +388,76 @@ model TelegramUserMapping {
   @@index([telegramUserId])
   @@map("telegram_user_mappings")
 }
+
+// ============================================
+// LONG-TERM MEMORY (Module: memory)
+// ============================================
+
+model MemoryEntry {
+  id              String    @id @default(cuid())
+  agentId         String
+  userId          String
+  key             String
+  value           String    @db.Text
+  category        String    @default("general")
+  importance      Int       @default(5)  // 1-10
+  accessCount     Int       @default(0)
+  lastAccessedAt  DateTime  @default(now())
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([agentId, userId, key])
+  @@index([agentId, userId])
+  @@index([category])
+  @@index([importance])
+  @@map("memory_entries")
+}
+
+// ============================================
+// RAG DOCUMENTS (Module: rag)
+// ============================================
+
+model RagDocument {
+  id              String    @id @default(cuid())
+  agentId         String
+  title           String
+  content         String    @db.Text
+  source          String
+  chunksJson      String    @db.Text  // JSON array of TextChunk[]
+  metadata        Json?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([agentId])
+  @@map("rag_documents")
+}
+
+// ============================================
+// SCHEDULER (Module: scheduler)
+// ============================================
+
+model ScheduledTask {
+  id              String    @id @default(cuid())
+  agentId         String
+  userId          String
+  name            String
+  description     String?
+  schedule        String    // "every 5m", "daily 09:00", cron
+  actionJson      String    @db.Text  // JSON TaskAction
+  isActive        Boolean   @default(true)
+  
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  runCount        Int       @default(0)
+  maxRuns         Int?      // null = unlimited
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([agentId])
+  @@index([userId])
+  @@index([isActive, nextRunAt])
+  @@map("scheduled_tasks")
+}
