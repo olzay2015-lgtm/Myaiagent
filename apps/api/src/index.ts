@@ -11,6 +11,7 @@ import { telegramWebhookRoutes } from './modules/telegram/telegram-webhook.route
 import { telegramConfigRoutes } from './modules/telegram/telegram-config.routes';
 import { initializeTools } from '@ai-agent-platform/tools-registry';
 import { telegramService } from './providers/telegram/telegram.service';
+import { initializeModules } from './module-init';
 
 dotenv.config();
 
@@ -52,6 +53,15 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-app.listen(PORT, () => {
-  console.log(`API Server running on port ${PORT}`);
+// Initialize platform modules, then start server
+initializeModules(app).then(() => {
+  app.listen(PORT, () => {
+    console.log(`API Server running on port ${PORT}`);
+  });
+}).catch(err => {
+  console.error('Failed to initialize modules:', err);
+  // Start server anyway — core functionality still works
+  app.listen(PORT, () => {
+    console.log(`API Server running on port ${PORT} (some modules failed to load)`);
+  });
 });
