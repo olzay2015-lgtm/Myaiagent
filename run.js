@@ -23,6 +23,12 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.url === '/') {
+    const indexPath = path.join(__dirname, 'apps/api/public/index.html');
+    if (fs.existsSync(indexPath)) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(fs.readFileSync(indexPath));
+      return;
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       name: 'AI Agent Platform',
