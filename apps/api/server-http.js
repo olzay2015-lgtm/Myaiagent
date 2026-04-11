@@ -73,8 +73,17 @@ const TOOLHOUSE_API_KEY = 'th-kHr-qz8mFCCGA-cT84d7cBJ6HCLJyqMqdKcXAF5mwB0';
 const TOOLHOUSE_BUNDLE = 'myaiagent';
 const TOOLHOUSE_API_URL = 'https://api.toolhouse.ai/v1';
 
+// Toolhouse MCP disabled on VPS
 let mcpClient = null;
 let toolhouseTools = [];
+
+async function callToolhouseTool(toolName, args) {
+  return 'Toolhouse MCP is not available on this server.';
+}
+
+async function simpleWebSearch(query) {
+  return `Поиск временно недоступен. Используйте Google для поиска: https://google.com/search?q=${encodeURIComponent(query)}`;
+}
 
 async function initToolhouseMCP() {
   console.log('[Toolhouse MCP] Waiting for local MCP server...');
@@ -133,8 +142,6 @@ async function callToolhouseTool(toolName, args) {
     return `Error: ${error.message}`;
   }
 }
-
-initToolhouseMCP();
 
 async function simpleWebSearch(query) {
   // Try Toolhouse MCP first
