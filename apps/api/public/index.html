@@ -90,31 +90,47 @@
             background-clip: text;
         }
 
-        .new-chat-btn {
-            background: var(--accent-gradient);
-            border: none;
-            color: white;
-            padding: 14px 20px;
-            border-radius: 12px;
-            font-size: 15px;
-            font-weight: 500;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: all 0.2s;
-            margin-bottom: 24px;
-        }
 
-        .new-chat-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
-        }
 
-        .agents-section {
+.agents-section {
             flex: 1;
             overflow-y: auto;
+        }
+
+        .agents-section::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .agents-section::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+        }
+
+        .agents-section::-webkit-scrollbar-thumb {
+            background: var(--accent-primary);
+            border-radius: 3px;
+        }
+
+        .agents-section::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-secondary);
+        }
+
+        .conversations-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .conversations-scroll::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+        }
+
+        .conversations-scroll::-webkit-scrollbar-thumb {
+            background: var(--accent-primary);
+            border-radius: 3px;
+        }
+
+        .conversations-scroll::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-secondary);
         }
 
         .section-title {
@@ -708,11 +724,7 @@
             <div class="logo">
                 <div class="logo-icon">🤖</div>
                 <div class="logo-text">AI Agent</div>
-            </div>
-
-            <button class="new-chat-btn" id="newChatBtn">
-                <span>+</span> New Chat
-            </button>
+</div>
 
 <div class="agents-section">
                 <div class="section-title" style="display: flex; align-items: center; cursor: pointer;" id="agentsToggle">
@@ -725,7 +737,7 @@
                 <div class="section-title" style="display: flex; align-items: center; cursor: pointer;" id="historyToggle">
                     History <span style="margin-left: auto;">▼</span>
                 </div>
-                <div id="conversationsList" style="display: none; max-height: 200px; overflow-y: auto;"></div>
+                <div id="conversationsList" style="display: none; max-height: 200px; overflow-y: auto;" class="conversations-scroll"></div>
             </div>
         </div>
 
@@ -814,8 +826,8 @@
 
     <script>
 const API_URL = window.location.origin;
-        let currentAgent = null;
-        let currentConversationId = null;
+        let currentAgent = localStorage.getItem('currentAgent') || null;
+        let currentConversationId = localStorage.getItem('currentConversationId') ? parseInt(localStorage.getItem('currentConversationId')) : null;
         let conversationHistory = [];
         let scheduledTasks = [];
 
@@ -830,7 +842,7 @@ const API_URL = window.location.origin;
                     const list = document.getElementById('agentsList');
                     list.innerHTML = '';
                     
-                    agents.forEach(agent => {
+agents.forEach(agent => {
                         const div = document.createElement('div');
                         div.className = 'agent-item';
                         div.dataset.id = agent.id;
@@ -845,10 +857,16 @@ const API_URL = window.location.origin;
                         list.appendChild(div);
                     });
 
-                    // Auto-select first agent
-if (agents.length > 0) {
+                    // Restore from localStorage or auto-select first
+                    if (currentAgent) {
+                        const savedAgent = agents.find(a => a.id === currentAgent);
+                        if (savedAgent) {
+                            selectAgent(savedAgent.id, savedAgent.name);
+                        } else {
+                            selectAgent(agents[0].id, agents[0].name);
+                        }
+                    } else if (agents.length > 0) {
                         selectAgent(agents[0].id, agents[0].name);
-                        list.children[0]?.classList.add('active');
                     }
                 }
             } catch (error) {
@@ -856,8 +874,9 @@ if (agents.length > 0) {
             }
         }
 
-        function selectAgent(agentId, agentName) {
+function selectAgent(agentId, agentName) {
             currentAgent = agentId;
+            localStorage.setItem('currentAgent', agentId);
             conversationHistory = [];
             
             document.querySelectorAll('.agent-item').forEach(item => {
@@ -880,12 +899,16 @@ async function loadConversation(agentId, agentName) {
                 
                 if (data.success && data.history && data.history.length > 0) {
                     currentConversationId = data.conversationId;
+                    if (data.conversationId) {
+                        localStorage.setItem('currentConversationId', data.conversationId);
+                    }
                     data.history.forEach(msg => {
                         addMessage(msg.role, msg.content);
                     });
                     conversationHistory = data.history;
                 } else {
                     currentConversationId = null;
+                    localStorage.removeItem('currentConversationId');
                     conversationHistory = [];
                     messagesContainer.innerHTML = `
                         <div class="welcome-screen">
@@ -992,6 +1015,94 @@ async function loadConversation(agentId, agentName) {
                 console.error('Error loading conversation:', error);
             }
         }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendButton');
+            const message = input.value.trim();
+            
+            if (!message || !currentAgent) return;
+            
+            sendBtn.disabled = true;
+            input.value = '';
+            
+            const messagesContainer = document.getElementById('chatMessages');
+            const welcomeScreen = document.getElementById('welcomeScreen');
+            if (welcomeScreen) welcomeScreen.remove();
+            
+            addMessage('user', message);
+            
+            const typingIndicator = document.getElementById('typingIndicator');
+            typingIndicator.classList.add('active');
+            
+            try {
+                const response = await fetch(`${API_URL}/chat/${currentAgent}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        conversationId: currentConversationId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                typingIndicator.classList.remove('active');
+                
+                if (data.success && data.reply) {
+                    currentConversationId = data.conversationId;
+                    if (data.conversationId) {
+                        localStorage.setItem('currentConversationId', data.conversationId);
+                    }
+                    addMessage('assistant', data.reply);
+                } else {
+                    addMessage('assistant', 'Error: ' + (data.error || 'Failed to send message'));
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                typingIndicator.classList.remove('active');
+                addMessage('assistant', 'Error: ' + error.message);
+            }
+            
+            sendBtn.disabled = false;
+            input.focus();
+        }
+
+        function addMessage(role, content) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const welcomeScreen = document.getElementById('welcomeScreen');
+            if (welcomeScreen) welcomeScreen.remove();
+            
+            const isUser = role === 'user';
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${isUser ? '👤' : '🤖'}</div>
+                <div class="message-content">${escapeHtml(content)}</div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            if (role === 'user') {
+                conversationHistory.push({ role: 'user', content: content });
+            } else if (role === 'assistant') {
+                conversationHistory.push({ role: 'assistant', content: content });
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        document.getElementById('sendButton').addEventListener('click', sendMessage);
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
         
         loadAgents();
     </script>
