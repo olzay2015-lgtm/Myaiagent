@@ -714,25 +714,18 @@
                 <span>+</span> New Chat
             </button>
 
-            <div class="agents-section">
-                <div class="section-title">Your Agents</div>
-                <div id="agentsList"></div>
+<div class="agents-section">
+                <div class="section-title" style="display: flex; align-items: center; cursor: pointer;" id="agentsToggle">
+                    Your Agents <span style="margin-left: auto;">▼</span>
+                </div>
+                <div id="agentsList" style="display: none;"></div>
             </div>
 
-            <div class="section-title" style="margin-top: 20px;">Tools</div>
-            <div class="agent-item">
-                <div class="agent-avatar">🌐</div>
-                <div class="agent-info">
-                    <div class="agent-name">Web Search</div>
-                    <div class="agent-desc">DuckDuckGo</div>
+            <div class="agents-section" style="margin-top: auto;">
+                <div class="section-title" style="display: flex; align-items: center; cursor: pointer;" id="historyToggle">
+                    History <span style="margin-left: auto;">▼</span>
                 </div>
-            </div>
-            <div class="agent-item">
-                <div class="agent-avatar">📅</div>
-                <div class="agent-info">
-                    <div class="agent-name">Scheduler</div>
-                    <div class="agent-desc">Telegram reminders</div>
-                </div>
+                <div id="conversationsList" style="display: none; max-height: 200px; overflow-y: auto;"></div>
             </div>
         </div>
 
@@ -820,8 +813,9 @@
     </div>
 
     <script>
-        const API_URL = window.location.origin;
+const API_URL = window.location.origin;
         let currentAgent = null;
+        let currentConversationId = null;
         let conversationHistory = [];
         let scheduledTasks = [];
 
@@ -876,7 +870,7 @@ if (agents.length > 0) {
             loadConversation(agentId, agentName);
         }
 
-        async function loadConversation(agentId, agentName) {
+async function loadConversation(agentId, agentName) {
             try {
                 const response = await fetch(`${API_URL}/chat/${agentId}`);
                 const data = await response.json();
@@ -884,12 +878,12 @@ if (agents.length > 0) {
                 const messagesContainer = document.getElementById('chatMessages');
                 messagesContainer.innerHTML = '';
                 
-                if (data.success && data.data.history && data.data.history.length > 0) {
-                    // Show conversation history
-                    data.data.history.forEach(msg => {
+                if (data.success && data.history && data.history.length > 0) {
+                    currentConversationId = data.conversationId;
+                    data.history.forEach(msg => {
                         addMessage(msg.role, msg.content);
-                    });
-                    conversationHistory = data.data.history;
+});
+                    conversationHistory = data.history;
                 } else {
                     messagesContainer.innerHTML = `
                         <div class="welcome-screen">
@@ -933,22 +927,27 @@ if (agents.length > 0) {
             button.disabled = true;
             showTypingIndicator();
 
-            try {
+try {
                 const response = await fetch(`${API_URL}/chat/${currentAgent}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message, history: conversationHistory })
+                    body: JSON.stringify({ 
+                        message, 
+                        agentId: currentAgent,
+                        conversationId: currentConversationId
+                    })
                 });
 
                 const data = await response.json();
                 hideTypingIndicator();
 
                 if (data.success) {
-                    addMessage('assistant', data.data.message.content);
+                    addMessage('assistant', data.reply);
                     conversationHistory.push(
                         { role: 'user', content: message },
-                        { role: 'assistant', content: data.data.message.content }
+                        { role: 'assistant', content: data.reply }
                     );
+                    currentConversationId = data.conversationId;
                 }
             } catch (error) {
                 hideTypingIndicator();
@@ -1126,7 +1125,90 @@ if (agents.length > 0) {
             }
         }
 
-        // Initialize
+// Initialize
+        // Toggle agents dropdown
+        document.getElementById('agentsToggle').addEventListener('click', function() {
+            const list = document.getElementById('agentsList');
+            const arrow = this.querySelector('span');
+            if (list.style.display === 'none') {
+                list.style.display = 'block';
+                arrow.textContent = '▲';
+            } else {
+                list.style.display = 'none';
+                arrow.textContent = '▼';
+            }
+        });
+
+        // Toggle history dropdown
+        document.getElementById('historyToggle').addEventListener('click', function() {
+            const list = document.getElementById('conversationsList');
+            const arrow = this.querySelector('span');
+            if (list.style.display === 'none') {
+                list.style.display = 'block';
+                arrow.textContent = '▲';
+                loadConversations();
+            } else {
+                list.style.display = 'none';
+                arrow.textContent = '▼';
+            }
+        });
+
+        // Load conversations for sidebar
+        async function loadConversations() {
+            try {
+                const response = await fetch(`${API_URL}/conversations`);
+                const data = await response.json();
+                
+                if (data.success && data.conversations.length > 0) {
+                    const list = document.getElementById('conversationsList');
+                    list.innerHTML = '';
+                    
+                    data.conversations.forEach(conv => {
+                        const div = document.createElement('div');
+                        div.className = 'agent-item';
+                        div.style.cursor = 'pointer';
+                        div.dataset.id = conv.id;
+                        div.innerHTML = `
+                            <div class="agent-avatar">💬</div>
+                            <div class="agent-info">
+                                <div class="agent-name">${conv.title || 'Chat'}</div>
+                                <div class="agent-desc">${conv.last_message ? conv.last_message.substring(0, 30) + '...' : 'No messages'}</div>
+                            </div>
+                        `;
+                        div.addEventListener('click', () => loadConversation(conv.id));
+                        list.appendChild(div);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading conversations:', error);
+            }
+        }
+
+        // Load specific conversation
+        async function loadConversation(conversationId) {
+            try {
+                const response = await fetch(`${API_URL}/chat/${conversationId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentConversationId = conversationId;
+                    
+                    const messagesContainer = document.getElementById('chatMessages');
+                    messagesContainer.innerHTML = '';
+                    
+                    // Show messages
+                    if (data.history && data.history.length > 0) {
+                        data.history.forEach(msg => {
+                            addMessage(msg.role, msg.content);
+                        });
+                        conversationHistory = data.history;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading conversation:', error);
+            }
+        }
+        
         loadAgents();
     </script>
 </body>
