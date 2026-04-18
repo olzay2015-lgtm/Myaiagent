@@ -897,7 +897,18 @@ async function loadConversation(agentId, agentName) {
                 const messagesContainer = document.getElementById('chatMessages');
                 messagesContainer.innerHTML = '';
                 
-                if (data.success && data.history && data.history.length > 0) {
+                if (!data || !data.success) {
+                    messagesContainer.innerHTML = `
+                        <div class="welcome-screen">
+                            <div class="welcome-icon">✨</div>
+                            <h2 class="welcome-title">${agentName}</h2>
+                            <p class="welcome-subtitle">Start a conversation with ${agentName}.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                if (data.history && data.history.length > 0) {
                     currentConversationId = data.conversationId;
                     if (data.conversationId) {
                         localStorage.setItem('currentConversationId', data.conversationId);
@@ -996,20 +1007,23 @@ async function loadConversation(agentId, agentName) {
                 const response = await fetch(`${API_URL}/chat/${conversationId}`);
                 const data = await response.json();
                 
-                if (data.success && data.history) {
-                    currentConversationId = conversationId;
-                    
-                    const messagesContainer = document.getElementById('chatMessages');
-                    messagesContainer.innerHTML = '';
-                    
-                    if (data.history.length > 0) {
-                        data.history.forEach(msg => {
-                            addMessage(msg.role, msg.content);
-                        });
-                        conversationHistory = data.history;
-                    } else {
-                        conversationHistory = [];
-                    }
+                if (!data || !data.success) {
+                    return;
+                }
+                
+                currentConversationId = conversationId;
+                localStorage.setItem('currentConversationId', conversationId);
+                
+                const messagesContainer = document.getElementById('chatMessages');
+                messagesContainer.innerHTML = '';
+                
+                if (data.history && data.history.length > 0) {
+                    data.history.forEach(msg => {
+                        addMessage(msg.role, msg.content);
+                    });
+                    conversationHistory = data.history;
+                } else {
+                    conversationHistory = [];
                 }
             } catch (error) {
                 console.error('Error loading conversation:', error);
