@@ -197,7 +197,13 @@ const server = http.createServer((req, res) => {
         
         // Get or create conversation
         let convId = conversationId;
-        if (!convId) {
+        if (!convId || convId === null || convId === undefined) {
+          convId = getOrCreateConversation(agentId);
+        }
+        
+        // Verify conversation exists
+        const existingConv = db.prepare('SELECT id FROM conversations WHERE id = ?').get(convId);
+        if (!existingConv) {
           convId = getOrCreateConversation(agentId);
         }
         
