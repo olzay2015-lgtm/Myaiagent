@@ -110,21 +110,37 @@ const server = http.createServer((req, res) => {
 
   // Get conversation history
   if (req.url.startsWith('/chat/') && req.method === 'GET') {
-    const conversationId = parseInt(req.url.split('/')[2]);
+    const idPart = req.url.split('/')[2];
     
-    if (!conversationId) {
-      // Get most recent conversation for agent
+    // Check if it's an agent ID (starts with 'agent-')
+    if (idPart && idPart.startsWith('agent-')) {
+      // Get most recent conversation for this agent
       const recent = db.prepare(`
         SELECT id FROM conversations 
+        WHERE agent_id = ?
         ORDER BY updated_at DESC LIMIT 1
-      `).get();
+      `).get(idPart);
       
       if (recent) {
         const history = getConversationHistory(recent.id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, conversationId: recent.id, history }));
         return;
+      } else {
+        // No conversation exists for this agent
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, conversationId: null, history: [] }));
+        return;
       }
+    }
+    
+    // Otherwise, treat as conversation ID
+    const conversationId = parseInt(idPart);
+    
+    if (!conversationId) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, conversationId: null, history: [] }));
+      return;
     }
     
     const history = getConversationHistory(conversationId);
