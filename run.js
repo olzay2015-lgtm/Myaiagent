@@ -8,10 +8,10 @@ require('dotenv').config();
 const PORT = process.env.PORT || 4001;
 
 const AGENT_PROMPTS = {
-  'agent-1': 'Ты Маркетолог. Помогаешь с маркетингом, продвижением и продажами. Давай полезные советы по бизнесу.',
-  'agent-2': 'Ты Психолог. Помогаешь с психологической поддержкой и эмоциональным здоровьем. Будь эмпатичным.',
-  'agent-3': 'Ты Аналитик. Помогаешь анализировать данные и находить решения. Будь точным и практичным.',
-  'agent-4': 'Ты Помощник. Помогаешь с любыми вопросами. Давай полезные и подробные ответы.'
+  'agent-1': 'Ты Маркетолог. Помогаешь с маркетингом, продвижением и продажами. Давай полезные советы по бизнесу. ВСЕГДА отвечай на русском языке. Используй известную информацию о пользователе из контекста ниже.',
+  'agent-2': 'Ты Психолог. Помогаешь с психологической поддержкой и эмоциональным здоровьем. Будь эмпатичным. ВСЕГДА отвечай на русском языке. Используй известную информацию о пользователе из контекста ниже.',
+  'agent-3': 'Ты Аналитик. Помогаешь анализировать данные и находить решения. Будь точным и практичным. ВСЕГДА отвечай на русском языке. Используй известную информацию о пользователе из контекста ниже.',
+  'agent-4': 'Ты Помощник. Помогаешь с любыми вопросами. Давай полезные и подробные ответы. ВСЕГДА отвечай на русском языке. Используй известную информацию о пользователе из контекста ниже.'
 };
 
 const agents = [
@@ -128,12 +128,12 @@ async function extractFactsFromMessage(message) {
         'HTTP-Referer': 'http://64.188.116.103:4001',
         'X-Title': 'AI Agent Platform'
       },
-      body: JSON.stringify({
-        model: 'openai/gpt-3.5-turbo',
+body: JSON.stringify({
+        model: 'openai/gpt-4o-mini',
         messages: [
           { 
             role: 'system', 
-            content: 'Ты - эксперт по извлечению фактов из текста. Извлеки важные факты о пользователе из текста ниже. Верни результат в формате JSON массива с объектами: [{"key": "имя_факта", "value": "значение", "category": "категория"}]. Категории: personal, work, location, interests, business, goals. Если фактов нет - верни пустой массив []. Отвечай ТОЛЬКО массивом JSON, без пояснений.' 
+            content: 'Ты - эксперт по извлечению фактов из текста. Извлеки важные факты о пользователе из текста ниже. Верни результат в формате JSON массива с объектами: [{"key": "имя_факта", "value": "значение", "category": "категория"}]. Категории: personal (имя, возраст), work (профессия, работа), location (город, страна), interests (интересы, хобби), business (бизнес), goals (цели). Если фактов нет - верни пустой массив []. Отвечай ТОЛЬКО массивом JSON, без пояснений. Ключи и значения должны быть на том же языке, что и входящий текст.' 
           },
           { role: 'user', content: message }
         ],
@@ -279,7 +279,7 @@ const server = http.createServer((req, res) => {
   // Chat endpoint
   if ((req.url === '/chat' || req.url.startsWith('/chat/')) && req.method === 'POST') {
     let body = '';
-    req.on('data', chunk => body += chunk);
+    req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
         const data = JSON.parse(body);
@@ -315,10 +315,24 @@ const server = http.createServer((req, res) => {
         const userFacts = getUserFacts();
         let factsContext = '';
         if (userFacts.length > 0) {
-          factsContext = '\nИзвестные факты о пользователе:\n';
+          factsContext = '\n\nИзвестная информация о пользователе:\n';
+          const keyTranslations = {
+            'name': 'имя',
+            'occupation': 'профессия',
+            'work': 'работа',
+            'location': 'город',
+            'city': 'город',
+            'interests': 'интересы',
+            'hobbies': 'хобби',
+            'business': 'бизнес',
+            'goals': 'цели',
+            'age': 'возраст'
+          };
           userFacts.forEach(fact => {
-            factsContext += `- ${fact.fact_key}: ${fact.fact_value}\n`;
+            const translatedKey = keyTranslations[fact.fact_key] || fact.fact_key;
+            factsContext += `- ${translatedKey}: ${fact.fact_value}\n`;
           });
+          factsContext += '\nИспользуй эту информацию при ответе на вопросы пользователя.\n';
         }
         
         const systemPrompt = (AGENT_PROMPTS[agentId] || AGENT_PROMPTS['agent-4']) + factsContext;
@@ -337,7 +351,7 @@ const server = http.createServer((req, res) => {
             'X-Title': 'AI Agent Platform'
           },
           body: JSON.stringify({
-            model: 'openai/gpt-3.5-turbo',
+            model: 'openai/gpt-4o-mini',
             messages: messages
           })
         });
