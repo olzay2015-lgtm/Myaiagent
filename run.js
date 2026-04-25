@@ -43,6 +43,17 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
   );
+  
+  CREATE TABLE IF NOT EXISTS user_facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fact_key TEXT NOT NULL,
+    fact_value TEXT NOT NULL,
+    category TEXT DEFAULT 'general',
+    confidence REAL DEFAULT 1.0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(fact_key)
+  );
 `);
 
 // Helper functions
@@ -89,6 +100,85 @@ function getRecentConversations(limit = 10) {
   `).all(limit);
 }
 
+// User facts functions
+function getUserFacts() {
+  return db.prepare('SELECT * FROM user_facts ORDER BY updated_at DESC').all();
+}
+
+function saveUserFact(key, value, category = 'general') {
+  const normalizedKey = key.toLowerCase().trim();
+  const existing = db.prepare('SELECT id FROM user_facts WHERE fact_key = ?').get(normalizedKey);
+  
+  if (existing) {
+    db.prepare('UPDATE user_facts SET fact_value = ?, updated_at = CURRENT_TIMESTAMP WHERE fact_key = ?').run(value, normalizedKey);
+  } else {
+    db.prepare('INSERT INTO user_facts (fact_key, fact_value, category) VALUES (?, ?, ?)').run(normalizedKey, value, category);
+  }
+}
+
+async function extractFactsFromMessage(message) {
+  const facts = [];
+  
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'http://64.188.116.103:4001',
+        'X-Title': 'AI Agent Platform'
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-3.5-turbo',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'Ты - эксперт по извлечению фактов из текста. Извлеки важные факты о пользователе из текста ниже. Верни результат в формате JSON массива с объектами: [{"key": "имя_факта", "value": "значение", "category": "категория"}]. Категории: personal, work, location, interests, business, goals. Если фактов нет - верни пустой массив []. Отвечай ТОЛЬКО массивом JSON, без пояснений.' 
+          },
+          { role: 'user', content: message }
+        ],
+        max_tokens: 500
+      })
+    });
+    
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || '[]';
+    
+    try {
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (e) {
+      console.log('Failed to parse facts:', content);
+    }
+  } catch (e) {
+    console.error('Error extracting facts:', e.message);
+  }
+  
+  return facts;
+}
+
+async function processAndSaveFacts(agentReply, conversationId) {
+  const lastMessages = db.prepare(`
+    SELECT content FROM messages 
+    WHERE conversation_id = ? 
+    ORDER BY created_at DESC 
+    LIMIT 5
+  `).all(conversationId);
+  
+  const combinedText = lastMessages.map(m => m.content).join('\n');
+  const facts = await extractFactsFromMessage(combinedText);
+  
+  for (const fact of facts) {
+    if (fact.key && fact.value) {
+      saveUserFact(fact.key, fact.value, fact.category || 'general');
+    }
+  }
+  
+  return facts.length;
+}
+
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -105,6 +195,14 @@ const server = http.createServer((req, res) => {
     const conversations = getRecentConversations(10);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, conversations }));
+    return;
+  }
+
+  // Get user facts (long-term memory)
+  if (req.url === '/facts' && req.method === 'GET') {
+    const facts = getUserFacts();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, facts }));
     return;
   }
 
@@ -213,8 +311,20 @@ const server = http.createServer((req, res) => {
         // Get conversation history for context
         const history = getConversationHistory(convId);
         
+        // Get user facts for long-term memory
+        const userFacts = getUserFacts();
+        let factsContext = '';
+        if (userFacts.length > 0) {
+          factsContext = '\nИзвестные факты о пользователе:\n';
+          userFacts.forEach(fact => {
+            factsContext += `- ${fact.fact_key}: ${fact.fact_value}\n`;
+          });
+        }
+        
+        const systemPrompt = (AGENT_PROMPTS[agentId] || AGENT_PROMPTS['agent-4']) + factsContext;
+        
         const messages = [
-          { role: 'system', content: AGENT_PROMPTS[agentId] || AGENT_PROMPTS['agent-4'] },
+          { role: 'system', content: systemPrompt },
           ...history.map(h => ({ role: h.role, content: h.content }))
         ];
         
@@ -237,6 +347,9 @@ const server = http.createServer((req, res) => {
         
         // Add assistant message
         addMessage(convId, 'assistant', reply);
+        
+        // Extract and save user facts
+        await processAndSaveFacts(reply, convId);
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, reply, conversationId: convId }));
